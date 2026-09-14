@@ -1,8 +1,10 @@
 import type { EventInput, EventItem } from '@/features/events/types.ts';
 import type { ISODateString, UUID } from '@/types/common.ts';
-import { nowISO } from '@/utils/date.ts';
+import { nowISO, startOfDayISO, endOfDayISO } from '@/utils/date.ts';
 import { normalizeColor } from '@/utils/color.ts';
 import { newId } from '@/utils/id.ts';
+import { getExecutor } from '../sqlite.ts';
+import type { EventRow } from '../schema.ts';
 
 export interface EventRepository {
   getAll(): Promise<EventItem[]>;
@@ -13,29 +15,72 @@ export interface EventRepository {
   remove(id: UUID): Promise<void>;
 }
 
-class InMemoryEventRepository implements EventRepository {
-  private store = new Map<UUID, EventItem>();
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
+function validateEvent(input: EventInput): void {
+  if (!input.title.trim()) throw new Error('Event title is required');
+  if (!(Date.parse(input.endAt) >= Date.parse(input.startAt))) {
+    throw new Error('Event endAt must be >= startAt');
+  }
+}
+
+function rowToEvent(row: EventRow): EventItem {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? undefined,
+    startAt: row.start_at,
+    endAt: row.end_at,
+    color: row.color,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// SQL-backed repository
+// ---------------------------------------------------------------------------
+
+class SqlEventRepository implements EventRepository {
   async getAll(): Promise<EventItem[]> {
-    return [...this.store.values()].sort((a, b) => a.startAt.localeCompare(b.startAt));
+    const rows = await getExecutor().query<EventRow>(
+      'SELECT * FROM events ORDER BY start_at ASC',
+    );
+    return rows.map(rowToEvent);
   }
+
   async getById(id: UUID): Promise<EventItem | null> {
-    return this.store.get(id) ?? null;
+    const rows = await getExecutor().query<EventRow>(
+      'SELECT * FROM events WHERE id = ?',
+      [id],
+    );
+    return rows.length > 0 ? rowToEvent(rows[0]) : null;
   }
+
+  /** Returns events whose time range overlaps [start, end]. */
   async getByDateRange(start: ISODateString, end: ISODateString): Promise<EventItem[]> {
-    return [...this.store.values()].filter((e) => e.startAt <= end && e.endAt >= start);
+    const rows = await getExecutor().query<EventRow>(
+      'SELECT * FROM events WHERE start_at <= ? AND end_at >= ? ORDER BY start_at ASC',
+      [end, start],
+    );
+    return rows.map(rowToEvent);
   }
+
+  /** Counts events that overlap the given calendar day (multi-day spans included). */
   async countByDay(day: ISODateString): Promise<number> {
-    const { isWithinDayISO } = await import('@/utils/date.ts');
-    return [...this.store.values()].filter(
-      (e) => isWithinDayISO(e.startAt, day) || isWithinDayISO(e.endAt, day),
-    ).length;
+    const dayStart = startOfDayISO(day);
+    const dayEnd = endOfDayISO(day);
+    const result = await getExecutor().query<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM events WHERE start_at <= ? AND end_at >= ?',
+      [dayEnd, dayStart],
+    );
+    return result[0]?.cnt ?? 0;
   }
+
   async create(input: EventInput): Promise<EventItem> {
-    if (!input.title.trim()) throw new Error('Event title is required');
-    if (!(Date.parse(input.endAt) >= Date.parse(input.startAt))) {
-      throw new Error('Event endAt must be >= startAt');
-    }
+    validateEvent(input);
     const now = nowISO();
     const item: EventItem = {
       id: newId(),
@@ -47,14 +92,34 @@ class InMemoryEventRepository implements EventRepository {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(item.id, item);
+
+    await getExecutor().execute(
+      `INSERT INTO events (id, title, description, start_at, end_at, color, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        item.id,
+        item.title,
+        item.description ?? null,
+        item.startAt,
+        item.endAt,
+        item.color,
+        item.createdAt,
+        item.updatedAt,
+      ],
+    );
+
     return item;
   }
+
   async remove(id: UUID): Promise<void> {
-    this.store.delete(id);
+    await getExecutor().execute('DELETE FROM events WHERE id = ?', [id]);
   }
 }
 
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+
 export function createEventRepository(): EventRepository {
-  return new InMemoryEventRepository();
+  return new SqlEventRepository();
 }

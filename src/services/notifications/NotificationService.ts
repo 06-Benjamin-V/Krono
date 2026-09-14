@@ -76,6 +76,19 @@ class CentralNotificationService implements NotificationService {
     await this.cancelTaskNotifications(task.id);
     return this.scheduleTaskNotifications(task, intervalHours);
   }
+
+  async rescheduleAllPendingTasks(intervalHours?: number): Promise<number> {
+    const { createTaskRepository } = await import('@/database/repositories/TaskRepository.ts');
+    const repo = createTaskRepository();
+    const pending = await repo.getPending();
+    let count = 0;
+    for (const task of pending) {
+      if (task.completed) continue;
+      await this.rescheduleTaskNotifications(task, intervalHours);
+      count++;
+    }
+    return count;
+  }
 }
 
 let instance: NotificationService | null = null;

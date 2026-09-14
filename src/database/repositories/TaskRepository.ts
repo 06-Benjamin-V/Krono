@@ -1,10 +1,10 @@
 import type { Task, TaskInput } from '@/features/tasks/types.ts';
 import type { ISODateString, UUID } from '@/types/common.ts';
-import { appConfig } from '@/config.ts';
-import { computeDailyEndAt, nowISO } from '@/utils/date.ts';
+import { computeDailyEndAt, nowISO, startOfDayISO, endOfDayISO } from '@/utils/date.ts';
 import { normalizeColor } from '@/utils/color.ts';
 import { newId } from '@/utils/id.ts';
 import { getExecutor } from '../sqlite.ts';
+import type { TaskRow } from '../schema.ts';
 
 export interface TaskRepository {
   getAll(): Promise<Task[]>;
@@ -17,6 +17,10 @@ export interface TaskRepository {
   remove(id: UUID): Promise<void>;
 }
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function validate(input: TaskInput): void {
   if (!input.title.trim()) throw new Error('Task title is required');
   if (input.type === 'DEADLINE') {
@@ -27,33 +31,74 @@ function validate(input: TaskInput): void {
   }
 }
 
-/** Stage-1 in-memory implementation behind the repository interface. SQL-backed native impl plugs into getExecutor() in stage 2. */
-class InMemoryTaskRepository implements TaskRepository {
-  private store = new Map<UUID, Task>();
+function rowToTask(row: TaskRow): Task {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? undefined,
+    type: row.type,
+    startAt: row.start_at,
+    endAt: row.end_at,
+    color: row.color,
+    completed: row.completed === 1,
+    completedAt: row.completed_at ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
+// ---------------------------------------------------------------------------
+// SQL-backed repository
+// ---------------------------------------------------------------------------
+
+class SqlTaskRepository implements TaskRepository {
   async getAll(): Promise<Task[]> {
-    return [...this.store.values()].sort((a, b) => a.startAt.localeCompare(b.startAt));
+    const rows = await getExecutor().query<TaskRow>(
+      'SELECT * FROM tasks ORDER BY start_at ASC',
+    );
+    return rows.map(rowToTask);
   }
+
   async getById(id: UUID): Promise<Task | null> {
-    return this.store.get(id) ?? null;
+    const rows = await getExecutor().query<TaskRow>(
+      'SELECT * FROM tasks WHERE id = ?',
+      [id],
+    );
+    return rows.length > 0 ? rowToTask(rows[0]) : null;
   }
+
+  /** Returns tasks whose time range overlaps [start, end]. */
   async getByDateRange(start: ISODateString, end: ISODateString): Promise<Task[]> {
-    void getExecutor();
-    return [...this.store.values()].filter((t) => t.startAt <= end && t.endAt >= start);
+    const rows = await getExecutor().query<TaskRow>(
+      'SELECT * FROM tasks WHERE start_at <= ? AND end_at >= ? ORDER BY start_at ASC',
+      [end, start],
+    );
+    return rows.map(rowToTask);
   }
+
   async getPending(): Promise<Task[]> {
-    return [...this.store.values()].filter((t) => !t.completed);
+    const rows = await getExecutor().query<TaskRow>(
+      'SELECT * FROM tasks WHERE completed = 0 ORDER BY start_at ASC',
+    );
+    return rows.map(rowToTask);
   }
+
+  /** Counts tasks that overlap the given calendar day (multi-day spans included). */
   async countByDay(day: ISODateString): Promise<number> {
-    const { isWithinDayISO } = await import('@/utils/date.ts');
-    return [...this.store.values()].filter(
-      (t) => isWithinDayISO(t.startAt, day) || isWithinDayISO(t.endAt, day),
-    ).length;
+    const dayStart = startOfDayISO(day);
+    const dayEnd = endOfDayISO(day);
+    const result = await getExecutor().query<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM tasks WHERE start_at <= ? AND end_at >= ?',
+      [dayEnd, dayStart],
+    );
+    return result[0]?.cnt ?? 0;
   }
+
   async create(input: TaskInput): Promise<Task> {
     validate(input);
     const now = nowISO();
-    const endAt = input.type === 'DAILY' ? computeDailyEndAt(input.startAt) : (input.endAt as ISODateString);
+    const endAt =
+      input.type === 'DAILY' ? computeDailyEndAt(input.startAt) : (input.endAt as ISODateString);
     const task: Task = {
       id: newId(),
       title: input.title.trim(),
@@ -66,23 +111,80 @@ class InMemoryTaskRepository implements TaskRepository {
       createdAt: now,
       updatedAt: now,
     };
-    void appConfig.databaseName;
-    this.store.set(task.id, task);
+
+    await getExecutor().execute(
+      `INSERT INTO tasks (id, title, description, type, start_at, end_at, color, completed, completed_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        task.id,
+        task.title,
+        task.description ?? null,
+        task.type,
+        task.startAt,
+        task.endAt,
+        task.color,
+        0,
+        null,
+        task.createdAt,
+        task.updatedAt,
+      ],
+    );
+
+    // Schedule reminders — dynamic import avoids circular dependency
+    try {
+      const { getNotificationService } = await import(
+        '@/services/notifications/NotificationService.ts'
+      );
+      await getNotificationService().scheduleTaskNotifications(task);
+    } catch {
+      // Best-effort: notification failure must not break task creation
+    }
+
     return task;
   }
+
   async complete(id: UUID): Promise<Task | null> {
-    const t = this.store.get(id);
-    if (!t) return null;
+    const existing = await this.getById(id);
+    if (!existing) return null;
+
     const completedAt = nowISO();
-    const updated: Task = { ...t, completed: true, completedAt, updatedAt: completedAt };
-    this.store.set(id, updated);
-    return updated;
+    await getExecutor().execute(
+      'UPDATE tasks SET completed = 1, completed_at = ?, updated_at = ? WHERE id = ?',
+      [completedAt, completedAt, id],
+    );
+
+    // Cancel notifications — dynamic import avoids circular dependency
+    try {
+      const { getNotificationService } = await import(
+        '@/services/notifications/NotificationService.ts'
+      );
+      await getNotificationService().cancelTaskNotifications(id);
+    } catch {
+      // Best-effort: notification failure must not break task completion
+    }
+
+    return { ...existing, completed: true, completedAt, updatedAt: completedAt };
   }
+
   async remove(id: UUID): Promise<void> {
-    this.store.delete(id);
+    await getExecutor().execute('DELETE FROM tasks WHERE id = ?', [id]);
+
+    // Cancel notifications — dynamic import avoids circular dependency
+    try {
+      const { getNotificationService } = await import(
+        '@/services/notifications/NotificationService.ts'
+      );
+      await getNotificationService().cancelTaskNotifications(id);
+    } catch {
+      // Best-effort
+    }
   }
 }
 
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+
 export function createTaskRepository(): TaskRepository {
-  return new InMemoryTaskRepository();
+  return new SqlTaskRepository();
 }
