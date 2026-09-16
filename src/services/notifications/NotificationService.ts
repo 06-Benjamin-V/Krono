@@ -17,8 +17,10 @@ export function notificationIdFor(taskId: UUID, index: number): number {
 }
 
 function intervalFor(task: Task, override?: number): number {
+  // DAILY siempre usa su cadencia fija de 2h; el override solo aplica a DEADLINE.
+  if (task.type === 'DAILY') return appConfig.dailyTaskNotificationIntervalHours;
   if (typeof override === 'number' && override > 0) return override;
-  return task.type === 'DAILY' ? appConfig.dailyTaskNotificationIntervalHours : appConfig.defaultDeadlineIntervalHours;
+  return appConfig.defaultDeadlineIntervalHours;
 }
 
 function buildReminders(task: Task, intervalHours: number): ScheduledReminder[] {

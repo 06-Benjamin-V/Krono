@@ -72,6 +72,16 @@ export function formatDayHeader(day: ISODateString, locale?: string): string {
   return format(d, 'd MMMM yyyy');
 }
 
+/** Short time label, e.g. "10:00". */
+export function formatTime(iso: ISODateString): string {
+  return format(parseISO(iso), 'HH:mm');
+}
+
+/** Month header, e.g. "septiembre 2026". */
+export function formatMonthHeader(iso: ISODateString): string {
+  return new Date(parseISO(iso)).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+}
+
 /** All reminder times strictly before endAt, starting at startAt + interval. */
 export function computeReminderTimes(
   startAt: ISODateString,

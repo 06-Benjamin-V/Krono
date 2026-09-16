@@ -1,0 +1,90 @@
+/* ============================================================
+   ANIMATIONS — Transiciones y keyframes fluidos
+   ============================================================ */
+
+/* Fade + slide para entradas de página */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Spinner de carga */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Pulsación suave para skeletons */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* Barra de progreso indeterminada */
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+/* Checkmark animado */
+@keyframes check-pop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Shake para errores */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+/* Clases utilitarias de animación */
+.anim-fade-in { animation: fade-in var(--transition-base) both; }
+.anim-slide-up { animation: slide-up var(--transition-base) both; }
+.anim-slide-down { animation: slide-down var(--transition-base) both; }
+.anim-slide-in-right { animation: slide-in-right var(--transition-base) both; }
+.anim-scale-in { animation: scale-in var(--transition-bounce) both; }
+.anim-shake { animation: shake 400ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+
+/* Stagger helper: retrasa animaciones de hijos */
+.stagger > * { animation: slide-up var(--transition-base) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(6) { animation-delay: 200ms; }
+.stagger > *:nth-child(7) { animation-delay: 240ms; }
+.stagger > *:nth-child(8) { animation-delay: 280ms; }
+
+/* Respetar preferencia de movimiento reducido */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

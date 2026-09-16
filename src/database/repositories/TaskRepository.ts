@@ -14,6 +14,7 @@ export interface TaskRepository {
   countByDay(day: ISODateString): Promise<number>;
   create(input: TaskInput): Promise<Task>;
   complete(id: UUID): Promise<Task | null>;
+  uncomplete(id: UUID): Promise<Task | null>;
   remove(id: UUID): Promise<void>;
 }
 
@@ -130,12 +131,16 @@ class SqlTaskRepository implements TaskRepository {
       ],
     );
 
-    // Schedule reminders — dynamic import avoids circular dependency
+    // Schedule reminders — dynamic import avoids circular dependency.
+    // DEADLINE usa el intervalo guardado en Ajustes; DAILY usa su cadencia fija.
     try {
-      const { getNotificationService } = await import(
-        '@/services/notifications/NotificationService.ts'
-      );
-      await getNotificationService().scheduleTaskNotifications(task);
+      const [{ getNotificationService }, { createSettingsRepository }] = await Promise.all([
+        import('@/services/notifications/NotificationService.ts'),
+        import('@/database/repositories/SettingsRepository.ts'),
+      ]);
+      const interval =
+        task.type === 'DEADLINE' ? await createSettingsRepository().getIntervalHours() : undefined;
+      await getNotificationService().scheduleTaskNotifications(task, interval);
     } catch {
       // Best-effort: notification failure must not break task creation
     }
@@ -164,6 +169,36 @@ class SqlTaskRepository implements TaskRepository {
     }
 
     return { ...existing, completed: true, completedAt, updatedAt: completedAt };
+  }
+
+  async uncomplete(id: UUID): Promise<Task | null> {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+
+    const updatedAt = nowISO();
+    await getExecutor().execute(
+      'UPDATE tasks SET completed = 0, completed_at = NULL, updated_at = ? WHERE id = ?',
+      [updatedAt, id],
+    );
+
+    // Re-schedule reminders — dynamic import avoids circular dependency.
+    // DEADLINE usa el intervalo guardado; DAILY su cadencia fija.
+    try {
+      const [{ getNotificationService }, { createSettingsRepository }] = await Promise.all([
+        import('@/services/notifications/NotificationService.ts'),
+        import('@/database/repositories/SettingsRepository.ts'),
+      ]);
+      const interval =
+        existing.type === 'DEADLINE' ? await createSettingsRepository().getIntervalHours() : undefined;
+      await getNotificationService().scheduleTaskNotifications(
+        { ...existing, completed: false, completedAt: undefined, updatedAt },
+        interval,
+      );
+    } catch {
+      // Best-effort
+    }
+
+    return { ...existing, completed: false, completedAt: undefined, updatedAt };
   }
 
   async remove(id: UUID): Promise<void> {
