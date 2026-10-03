@@ -33,6 +33,56 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- TaskManager DB ContentProvider for widgets -->
+        <provider
+            android:name=".database.TaskManagerContentProvider"
+            android:authorities="com.personaltaskmanager.app.widgetdata"
+            android:exported="false" />
+
+        <!-- Daily List Widget -->
+        <receiver
+            android:name=".widget.DailyListWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_daily_list_info" />
+        </receiver>
+
+        <!-- Monthly Calendar Widget -->
+        <receiver
+            android:name=".widget.MonthlyCalendarWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_monthly_calendar_info" />
+        </receiver>
+
+        <!-- Widget interaction broadcasts (explicit PendingIntents only) -->
+        <receiver
+            android:name=".widget.WidgetBroadcastReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.personaltaskmanager.app.widget.ACTION_PREV_DAY" />
+                <action android:name="com.personaltaskmanager.app.widget.ACTION_NEXT_DAY" />
+                <action android:name="com.personaltaskmanager.app.widget.ACTION_TOGGLE_COMPLETE" />
+                <action android:name="com.personaltaskmanager.app.widget.ACTION_WIDGET_DATA_CHANGED" />
+                <action android:name="com.personaltaskmanager.app.widget.ACTION_PREV_MONTH" />
+                <action android:name="com.personaltaskmanager.app.widget.ACTION_NEXT_MONTH" />
+                <action android:name="com.personaltaskmanager.app.widget.ACTION_SELECT_DAY" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".widget.WidgetUpdateService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 
     <!-- Permissions -->

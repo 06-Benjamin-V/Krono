@@ -22,20 +22,7 @@ Do not introduce a remote backend, cloud database, authentication server, or ext
 
 ## Git policy
 
-No AI agent may execute:
-
-- git commit
-- git push
-- git reset --hard
-- git clean
-
-Agents may inspect the repository with commands such as:
-
-- git status
-- git diff
-- git log
-
-After a coherent change is complete, Skynet must propose exactly one Conventional Commit message. The human user performs the actual commit and push.
+No AI agent may execute Git commands, including read-only commands. After a coherent change is complete, the agent must propose exactly one Conventional Commit message. The human user performs all Git operations, including commit and push.
 
 ## Suggested source organization
 

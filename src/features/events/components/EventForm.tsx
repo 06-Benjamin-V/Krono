@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import type { EventInput } from '@/features/events/types.ts';
+import type { EventItem, EventInput } from '@/features/events/types.ts';
 import { ColorPicker } from '@/components/ui/ColorPicker.tsx';
 import { Button } from '@/components/ui/Button.tsx';
 import { DEFAULT_COLORS } from '@/utils/color.ts';
 
 interface EventFormProps {
-  onCreated: () => void;
+  onCreated?: () => void;
   onCancel: () => void;
+  initialEvent?: EventItem | null;
 }
 
 function toLocalInputValue(iso: string): string {
@@ -15,14 +16,15 @@ function toLocalInputValue(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function EventForm({ onCreated, onCancel }: EventFormProps): JSX.Element {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [startAt, setStartAt] = useState(() => toLocalInputValue(new Date().toISOString()));
-  const [endAt, setEndAt] = useState('');
-  const [color, setColor] = useState(DEFAULT_COLORS[3]);
+export function EventForm({ onCreated, onCancel, initialEvent }: EventFormProps): JSX.Element {
+  const [title, setTitle] = useState(initialEvent?.title ?? '');
+  const [description, setDescription] = useState(initialEvent?.description ?? '');
+  const [startAt, setStartAt] = useState(() => initialEvent ? toLocalInputValue(initialEvent.startAt) : toLocalInputValue(new Date().toISOString()));
+  const [endAt, setEndAt] = useState(() => initialEvent ? toLocalInputValue(initialEvent.endAt) : '');
+  const [color, setColor] = useState(initialEvent?.color ?? DEFAULT_COLORS[3]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const isEdit = initialEvent != null;
 
   const handleSubmit = async (): Promise<void> => {
     setError(null);
@@ -30,7 +32,11 @@ export function EventForm({ onCreated, onCancel }: EventFormProps): JSX.Element 
       setError('El título es obligatorio');
       return;
     }
-    if (!endAt) {
+    if (!startAt || Number.isNaN(Date.parse(startAt))) {
+      setError('La fecha de inicio es obligatoria');
+      return;
+    }
+    if (!endAt || Number.isNaN(Date.parse(endAt))) {
       setError('La fecha de término es obligatoria');
       return;
     }
@@ -50,10 +56,15 @@ export function EventForm({ onCreated, onCancel }: EventFormProps): JSX.Element 
         color,
       };
       const { createEventRepository } = await import('@/database/repositories/EventRepository.ts');
-      await createEventRepository().create(input);
-      onCreated();
+      const repo = createEventRepository();
+      if (isEdit && initialEvent) {
+        await repo.update(initialEvent.id, input);
+      } else {
+        await repo.create(input);
+      }
+      onCreated?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al crear el evento');
+      setError(e instanceof Error ? e.message : 'Error al guardar el evento');
     } finally {
       setSaving(false);
     }
@@ -116,7 +127,7 @@ export function EventForm({ onCreated, onCancel }: EventFormProps): JSX.Element 
           Cancelar
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? 'Guardando…' : 'Crear evento'}
+          {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear evento'}
         </Button>
       </div>
     </form>

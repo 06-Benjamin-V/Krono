@@ -1,32 +1,78 @@
-import type { CSSProperties } from 'react';
 import type { EventItem } from '@/features/events/types.ts';
-import { TrashIcon } from '@/components/ui/Icons.tsx';
-import { formatTime } from '@/utils/date.ts';
+import { ExpandableCard } from '@/components/ui/ExpandableCard.tsx';
+import { EditIcon, TrashIcon } from '@/components/ui/Icons.tsx';
+import { formatDateTime, formatDate, formatDuration } from '@/utils/date.ts';
 
 interface EventCardProps {
   event: EventItem;
   onRemove: (id: string) => void;
+  onEdit: (id: string) => void;
 }
 
-export function EventCard({ event, onRemove }: EventCardProps): JSX.Element {
-  const timeLabel = `${formatTime(event.startAt)} → ${formatTime(event.endAt)}`;
-  return (
-    <div className="item-card" style={{ '--item-color': event.color } as CSSProperties}>
-      <div className="item-body">
-        <div className="item-title">{event.title}</div>
-        <div className="item-subtitle">
-          <span className="chip chip-event">EVENTO</span>
-        </div>
-        <div className="item-time">{timeLabel}</div>
+export function EventCard({ event, onRemove, onEdit }: EventCardProps): JSX.Element {
+  const details = (
+    <>
+      <div className="detail-divider" />
+      <div className="detail-row">
+        <span className="detail-label">Descripción</span>
+        <span className="detail-value">{event.description || 'Sin descripción'}</span>
       </div>
-      <button
-        type="button"
-        className="btn-icon"
-        onClick={() => onRemove(event.id)}
-        aria-label={`Eliminar evento ${event.title}`}
-      >
-        <TrashIcon />
-      </button>
-    </div>
+      <div className="detail-row">
+        <span className="detail-label">Inicio</span>
+        <span className="detail-value">{formatDateTime(event.startAt)}</span>
+      </div>
+      <div className="detail-row">
+        <span className="detail-label">Término</span>
+        <span className="detail-value">{formatDateTime(event.endAt)}</span>
+      </div>
+      <div className="detail-row">
+        <span className="detail-label">Duración</span>
+        <span className="detail-value">{formatDuration(event.startAt, event.endAt)}</span>
+      </div>
+      <div className="detail-row">
+        <span className="detail-label">Creado</span>
+        <span className="detail-value">{formatDate(event.createdAt)}</span>
+      </div>
+      <div className="detail-row">
+        <span className="detail-label">Actualizado</span>
+        <span className="detail-value">{formatDate(event.updatedAt)}</span>
+      </div>
+    </>
+  );
+
+  return (
+    <ExpandableCard
+      color={event.color}
+      title={event.title}
+      meta={
+        <>
+          <span className="chip chip-event">EVENTO</span>
+          <span style={{ marginLeft: 6 }}>{formatDateTime(event.startAt)}</span>
+        </>
+      }
+      actions={
+        <>
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={() => onEdit(event.id)}
+            aria-label={`Editar evento ${event.title}`}
+            title="Editar"
+          >
+            <EditIcon />
+          </button>
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={() => onRemove(event.id)}
+            aria-label={`Eliminar evento ${event.title}`}
+          >
+            <TrashIcon />
+          </button>
+        </>
+      }
+      details={details}
+      detailsLabel="Detalles del evento"
+    />
   );
 }

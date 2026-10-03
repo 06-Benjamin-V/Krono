@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RemoteViews-safe cell: only LinearLayout and TextView are used.
+     (plain View is not supported by RemoteViews; dots are TextViews tinted
+     via setBackgroundColor) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cell_container"
+    android:layout_width="0dp"
+    android:layout_height="42dp"
+    android:layout_weight="1"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#00000000"
+    android:padding="2dp">
+
+    <TextView
+        android:id="@+id/tv_day_number"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+android:text="15"
+            android:textColor="#2B1B1E"
+            android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/container_dots"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/dot_0"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:layout_margin="1dp"
+            android:background="#3B82F6"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/dot_1"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:layout_margin="1dp"
+            android:background="#3B82F6"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/dot_2"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:layout_margin="1dp"
+            android:background="#3B82F6"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/dot_3"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:layout_margin="1dp"
+            android:background="#3B82F6"
+            android:visibility="gone" />
+    </LinearLayout>
+
+</LinearLayout>

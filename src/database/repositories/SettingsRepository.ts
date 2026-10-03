@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS, type AppSettings } from '@/features/settings/types.ts';
 import { getExecutor } from '../sqlite.ts';
+import { notifyWidgetsUpdated } from '@/plugins/WidgetBridge.ts';
 
 export interface SettingsRepository {
   load(): Promise<AppSettings>;
@@ -48,6 +49,8 @@ class SqlSettingsRepository implements SettingsRepository {
     } catch {
       // Notification failure must not break settings save
     }
+
+    await notifyWidgetsUpdated();
   }
 }
 

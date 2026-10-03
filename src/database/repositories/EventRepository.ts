@@ -5,6 +5,7 @@ import { normalizeColor } from '@/utils/color.ts';
 import { newId } from '@/utils/id.ts';
 import { getExecutor } from '../sqlite.ts';
 import type { EventRow } from '../schema.ts';
+import { notifyWidgetsUpdated } from '@/plugins/WidgetBridge.ts';
 
 export interface EventRepository {
   getAll(): Promise<EventItem[]>;
@@ -12,6 +13,7 @@ export interface EventRepository {
   getByDateRange(start: ISODateString, end: ISODateString): Promise<EventItem[]>;
   countByDay(day: ISODateString): Promise<number>;
   create(input: EventInput): Promise<EventItem>;
+  update(id: UUID, input: EventInput): Promise<EventItem | null>;
   remove(id: UUID): Promise<void>;
 }
 
@@ -108,11 +110,46 @@ class SqlEventRepository implements EventRepository {
       ],
     );
 
+    await notifyWidgetsUpdated();
+
     return item;
+  }
+
+  async update(id: UUID, input: EventInput): Promise<EventItem | null> {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    validateEvent(input);
+
+    const now = nowISO();
+    await getExecutor().execute(
+      `UPDATE events SET title = ?, description = ?, start_at = ?, end_at = ?, color = ?, updated_at = ? WHERE id = ?`,
+      [
+        input.title.trim(),
+        input.description ?? null,
+        input.startAt,
+        input.endAt,
+        normalizeColor(input.color),
+        now,
+        id,
+      ],
+    );
+
+    await notifyWidgetsUpdated();
+
+    return {
+      ...existing,
+      title: input.title.trim(),
+      description: input.description,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      color: normalizeColor(input.color),
+      updatedAt: now,
+    };
   }
 
   async remove(id: UUID): Promise<void> {
     await getExecutor().execute('DELETE FROM events WHERE id = ?', [id]);
+    await notifyWidgetsUpdated();
   }
 }
 

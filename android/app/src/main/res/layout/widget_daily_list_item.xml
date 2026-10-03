@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RemoteViews-safe item: only LinearLayout and TextView are used.
+     (plain View and CheckBox are not supported by RemoteViews on all APIs) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="48dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
+    android:paddingEnd="4dp">
+
+    <!-- Color bar (LinearLayout: plain View is not supported by RemoteViews) -->
+    <LinearLayout
+        android:id="@+id/view_color_bar"
+        android:layout_width="4dp"
+        android:layout_height="36dp"
+        android:layout_marginEnd="8dp"
+        android:background="#3B82F6" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tv_item_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Título de la tarea"
+            android:textColor="#2B1B1E"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_item_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="10:00 – DAILY"
+            android:textColor="#6E5D60"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Completion indicator (TextView shows ✓ when completed, empty otherwise) -->
+    <TextView
+        android:id="@+id/cb_complete"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="8dp"
+        android:gravity="center"
+        android:text=""
+        android:textColor="#722F37"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

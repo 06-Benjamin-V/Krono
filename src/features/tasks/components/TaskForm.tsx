@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import type { TaskInput, TaskType } from '@/features/tasks/types.ts';
+import type { Task, TaskInput, TaskType } from '@/features/tasks/types.ts';
 import { ColorPicker } from '@/components/ui/ColorPicker.tsx';
 import { Button } from '@/components/ui/Button.tsx';
 import { DEFAULT_COLORS } from '@/utils/color.ts';
 
 interface TaskFormProps {
-  onCreated: () => void;
+  onCreated?: () => void;
   onCancel: () => void;
+  initialTask?: Task | null;
 }
 
 function toLocalInputValue(iso: string): string {
@@ -15,20 +16,25 @@ function toLocalInputValue(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function TaskForm({ onCreated, onCancel }: TaskFormProps): JSX.Element {
-  const [type, setType] = useState<TaskType>('DAILY');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [startAt, setStartAt] = useState(() => toLocalInputValue(new Date().toISOString()));
-  const [endAt, setEndAt] = useState('');
-  const [color, setColor] = useState(DEFAULT_COLORS[0]);
+export function TaskForm({ onCreated, onCancel, initialTask }: TaskFormProps): JSX.Element {
+  const [type, setType] = useState<TaskType>(initialTask?.type ?? 'DAILY');
+  const [title, setTitle] = useState(initialTask?.title ?? '');
+  const [description, setDescription] = useState(initialTask?.description ?? '');
+  const [startAt, setStartAt] = useState(() => initialTask ? toLocalInputValue(initialTask.startAt) : toLocalInputValue(new Date().toISOString()));
+  const [endAt, setEndAt] = useState(() => initialTask?.endAt ? toLocalInputValue(initialTask.endAt) : '');
+  const [color, setColor] = useState(initialTask?.color ?? DEFAULT_COLORS[0]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const isEdit = initialTask != null;
 
   const handleSubmit = async (): Promise<void> => {
     setError(null);
     if (!title.trim()) {
       setError('El título es obligatorio');
+      return;
+    }
+    if (!startAt || Number.isNaN(Date.parse(startAt))) {
+      setError('La fecha de inicio es obligatoria');
       return;
     }
     setSaving(true);
@@ -41,7 +47,7 @@ export function TaskForm({ onCreated, onCancel }: TaskFormProps): JSX.Element {
         color,
       };
       if (type === 'DEADLINE') {
-        if (!endAt) {
+        if (!endAt || Number.isNaN(Date.parse(endAt))) {
           setError('La fecha de término es obligatoria para tareas con plazo');
           setSaving(false);
           return;
@@ -55,10 +61,15 @@ export function TaskForm({ onCreated, onCancel }: TaskFormProps): JSX.Element {
         input.endAt = endIso;
       }
       const { createTaskRepository } = await import('@/database/repositories/TaskRepository.ts');
-      await createTaskRepository().create(input);
-      onCreated();
+      const repo = createTaskRepository();
+      if (isEdit && initialTask) {
+        await repo.update(initialTask.id, input);
+      } else {
+        await repo.create(input);
+      }
+      onCreated?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al crear la tarea');
+      setError(e instanceof Error ? e.message : 'Error al guardar la tarea');
     } finally {
       setSaving(false);
     }
@@ -134,7 +145,7 @@ export function TaskForm({ onCreated, onCancel }: TaskFormProps): JSX.Element {
           Cancelar
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? 'Guardando…' : 'Crear tarea'}
+          {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear tarea'}
         </Button>
       </div>
     </form>

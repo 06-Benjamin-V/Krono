@@ -5,6 +5,7 @@ import { normalizeColor } from '@/utils/color.ts';
 import { newId } from '@/utils/id.ts';
 import { getExecutor } from '../sqlite.ts';
 import type { TaskRow } from '../schema.ts';
+import { notifyWidgetsUpdated } from '@/plugins/WidgetBridge.ts';
 
 export interface TaskRepository {
   getAll(): Promise<Task[]>;
@@ -13,6 +14,7 @@ export interface TaskRepository {
   getPending(): Promise<Task[]>;
   countByDay(day: ISODateString): Promise<number>;
   create(input: TaskInput): Promise<Task>;
+  update(id: UUID, input: TaskInput): Promise<Task | null>;
   complete(id: UUID): Promise<Task | null>;
   uncomplete(id: UUID): Promise<Task | null>;
   remove(id: UUID): Promise<void>;
@@ -145,7 +147,61 @@ class SqlTaskRepository implements TaskRepository {
       // Best-effort: notification failure must not break task creation
     }
 
+    await notifyWidgetsUpdated();
+
     return task;
+  }
+
+  async update(id: UUID, input: TaskInput): Promise<Task | null> {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    validate(input);
+
+    const now = nowISO();
+    const endAt =
+      input.type === 'DAILY' ? computeDailyEndAt(input.startAt) : (input.endAt as ISODateString);
+
+    await getExecutor().execute(
+      `UPDATE tasks SET title = ?, description = ?, type = ?, start_at = ?, end_at = ?, color = ?, updated_at = ? WHERE id = ?`,
+      [
+        input.title.trim(),
+        input.description ?? null,
+        input.type,
+        input.startAt,
+        endAt,
+        normalizeColor(input.color),
+        now,
+        id,
+      ],
+    );
+
+    const updatedTask: Task = {
+      ...existing,
+      title: input.title.trim(),
+      description: input.description,
+      type: input.type,
+      startAt: input.startAt,
+      endAt,
+      color: normalizeColor(input.color),
+      updatedAt: now,
+    };
+
+    // Reschedule notifications
+    try {
+      const [{ getNotificationService }, { createSettingsRepository }] = await Promise.all([
+        import('@/services/notifications/NotificationService.ts'),
+        import('@/database/repositories/SettingsRepository.ts'),
+      ]);
+      const interval =
+        input.type === 'DEADLINE' ? await createSettingsRepository().getIntervalHours() : undefined;
+      await getNotificationService().rescheduleTaskNotifications(updatedTask, interval);
+    } catch {
+      // Best-effort
+    }
+
+    await notifyWidgetsUpdated();
+
+    return updatedTask;
   }
 
   async complete(id: UUID): Promise<Task | null> {
@@ -167,6 +223,8 @@ class SqlTaskRepository implements TaskRepository {
     } catch {
       // Best-effort: notification failure must not break task completion
     }
+
+    await notifyWidgetsUpdated();
 
     return { ...existing, completed: true, completedAt, updatedAt: completedAt };
   }
@@ -198,6 +256,8 @@ class SqlTaskRepository implements TaskRepository {
       // Best-effort
     }
 
+    await notifyWidgetsUpdated();
+
     return { ...existing, completed: false, completedAt: undefined, updatedAt };
   }
 
@@ -213,6 +273,8 @@ class SqlTaskRepository implements TaskRepository {
     } catch {
       // Best-effort
     }
+
+    await notifyWidgetsUpdated();
   }
 }
 

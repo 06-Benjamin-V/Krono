@@ -23,16 +23,31 @@ function intervalFor(task: Task, override?: number): number {
   return appConfig.defaultDeadlineIntervalHours;
 }
 
+/** Formatea el tiempo restante hasta `endAt` desde `fireAt`, p. ej. "Quedan 4h 30m". */
+function formatRemainingTime(fireAt: string, endAt: string): string {
+  const ms = Date.parse(endAt) - Date.parse(fireAt);
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  const totalMinutes = Math.floor(ms / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0 && minutes > 0) return `Quedan ${hours}h ${minutes}m`;
+  if (hours > 0) return `Quedan ${hours}h`;
+  return `Quedan ${minutes}m`;
+}
+
 function buildReminders(task: Task, intervalHours: number): ScheduledReminder[] {
   if (task.completed) return [];
   const times = computeReminderTimes(task.startAt, task.endAt, intervalHours);
-  return times.map((fireAt, i) => ({
-    notificationId: notificationIdFor(task.id, i),
-    taskId: task.id,
-    fireAt,
-    title: task.title,
-    body: `Reminder: ${task.title}`,
-  }));
+  return times.map((fireAt, i) => {
+    const remaining = formatRemainingTime(fireAt, task.endAt);
+    return {
+      notificationId: notificationIdFor(task.id, i),
+      taskId: task.id,
+      fireAt,
+      title: task.title,
+      body: remaining ? `${remaining}: ${task.title}` : `Reminder: ${task.title}`,
+    };
+  });
 }
 
 class CentralNotificationService implements NotificationService {

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Task } from '@/features/tasks/types.ts';
-import type { ISODateString } from '@/types/common.ts';
-import { startOfDayISO, endOfDayISO } from '@/utils/date.ts';
+import { createTaskRepository } from '@/database/repositories/TaskRepository.ts';
 
-interface UseTasksByDayResult {
+interface UseTasksResult {
   tasks: Task[];
   loading: boolean;
   error: string | null;
@@ -12,7 +11,7 @@ interface UseTasksByDayResult {
   removeTask: (id: string) => Promise<void>;
 }
 
-export function useTasksByDay(day: ISODateString): UseTasksByDayResult {
+export function useTasks(): UseTasksResult {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,24 +20,39 @@ export function useTasksByDay(day: ISODateString): UseTasksByDayResult {
     setLoading(true);
     setError(null);
     try {
-      const { createTaskRepository } = await import('@/database/repositories/TaskRepository.ts');
       const repo = createTaskRepository();
-      const items = await repo.getByDateRange(startOfDayISO(day), endOfDayISO(day));
+      const items = await repo.getAll();
       setTasks(items);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error cargando tareas');
     } finally {
       setLoading(false);
     }
-  }, [day]);
+  }, []);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
+  // Recarga al volver a la app: el widget nativo puede haber completado tareas
+  // mientras la app estaba en segundo plano.
+  useEffect(() => {
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') void reload();
+    };
+    const onFocus = (): void => {
+      void reload();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [reload]);
+
   const toggleComplete = useCallback(
     async (id: string): Promise<void> => {
-      const { createTaskRepository } = await import('@/database/repositories/TaskRepository.ts');
       const repo = createTaskRepository();
       const task = tasks.find((t) => t.id === id);
       if (!task) return;
@@ -59,7 +73,6 @@ export function useTasksByDay(day: ISODateString): UseTasksByDayResult {
 
   const removeTask = useCallback(
     async (id: string): Promise<void> => {
-      const { createTaskRepository } = await import('@/database/repositories/TaskRepository.ts');
       const repo = createTaskRepository();
       await repo.remove(id);
       setTasks((prev) => prev.filter((t) => t.id !== id));

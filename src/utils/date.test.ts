@@ -4,6 +4,9 @@ import {
   addHoursISO,
   computeDailyEndAt,
   computeReminderTimes,
+  formatDate,
+  formatDateTime,
+  formatDuration,
   isSameDayISO,
   isWithinDayISO,
   parseISOOrThrow,
@@ -38,5 +41,33 @@ describe('date utils', () => {
     expect(isSameDayISO('2026-09-14T10:00:00.000Z', '2026-09-14T23:00:00.000Z')).toBe(true);
     expect(isWithinDayISO('2026-09-14T23:59:00.000Z', '2026-09-14T10:00:00.000Z')).toBe(true);
     expect(() => parseISOOrThrow('not-a-date')).toThrow();
+  });
+});
+
+describe('date formatting (Spanish locale)', () => {
+  // Built from local time so assertions hold in any timezone.
+  const localIso = (y: number, m: number, d: number, h: number, min: number): string =>
+    new Date(y, m, d, h, min).toISOString();
+
+  it('formats a date as "d MMM yyyy"', () => {
+    expect(formatDate(localIso(2026, 8, 14, 10, 0))).toBe('14 sep 2026');
+  });
+
+  it('formats a date and time as "d MMM yyyy, HH:mm"', () => {
+    expect(formatDateTime(localIso(2026, 8, 14, 10, 0))).toBe('14 sep 2026, 10:00');
+    expect(formatDateTime(localIso(2026, 11, 3, 23, 5))).toBe('3 dic 2026, 23:05');
+  });
+
+  it('formats durations in Spanish', () => {
+    expect(formatDuration(localIso(2026, 8, 14, 10, 0), localIso(2026, 8, 15, 10, 0))).toBe('24 h');
+    expect(formatDuration(localIso(2026, 8, 14, 10, 0), localIso(2026, 8, 14, 12, 30))).toBe('2 h 30 min');
+    expect(formatDuration(localIso(2026, 8, 14, 10, 0), localIso(2026, 8, 14, 10, 45))).toBe('45 min');
+    expect(formatDuration(localIso(2026, 8, 14, 10, 0), localIso(2026, 8, 15, 12, 0))).toBe('1 d 2 h');
+  });
+
+  it('returns an empty duration for invalid ranges', () => {
+    const same = localIso(2026, 8, 14, 10, 0);
+    expect(formatDuration(same, same)).toBe('');
+    expect(formatDuration(localIso(2026, 8, 15, 10, 0), localIso(2026, 8, 14, 10, 0))).toBe('');
   });
 });
