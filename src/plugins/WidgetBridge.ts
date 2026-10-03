@@ -2,11 +2,13 @@ import { registerPlugin } from '@capacitor/core';
 import { Capacitor } from '@capacitor/core';
 
 export interface WidgetBridgePlugin {
+  prepareDatabase(): Promise<void>;
+  reconcileNotifications(): Promise<{count: number}>;
   /** Notifies native home-screen widgets that data changed so they refresh. */
   notifyWidgetsUpdated(): Promise<void>;
 }
 
-const WidgetBridge = registerPlugin<WidgetBridgePlugin>('WidgetBridge');
+export const WidgetBridge = registerPlugin<WidgetBridgePlugin>('WidgetBridge');
 
 /**
  * Best-effort notification to native widgets. Safe to call on web/tests

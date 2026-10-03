@@ -15,6 +15,11 @@ const baseTask: Task = {
 };
 
 describe('NotificationService planning', () => {
+  it('retains IDs when historical reminders are skipped', () => {
+    const all = __testables.buildReminders(baseTask, 2);
+    const future = __testables.buildReminders(baseTask, 2, Date.parse(all[2].fireAt));
+    expect(future).toEqual(all.slice(3));
+  });
   it('uses 2h cadence for DAILY and stable ids', () => {
     const reminders = __testables.buildReminders(baseTask, __testables.intervalFor(baseTask));
     expect(reminders).toHaveLength(11);

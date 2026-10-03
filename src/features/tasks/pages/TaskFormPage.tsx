@@ -1,7 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { createTaskRepository } from '@/database/repositories/TaskRepository.ts';
+import { createTaskService } from '@/services/TaskService.ts';
 import { TaskForm } from '@/features/tasks/components/TaskForm.tsx';
+import { ErrorNotice } from '@/components/ui/ErrorNotice.tsx';
 import { Button } from '@/components/ui/Button.tsx';
 import { ChevronLeftIcon } from '@/components/ui/Icons.tsx';
 import type { Task } from '@/features/tasks/types.ts';
@@ -11,6 +12,8 @@ export function TaskFormPage(): JSX.Element {
   const navigate = useNavigate();
   const isEdit = id != null;
   const [initialTask, setInitialTask] = useState<Task | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(isEdit);
 
   useEffect(() => {
@@ -18,22 +21,25 @@ export function TaskFormPage(): JSX.Element {
       setLoading(false);
       return;
     }
-    createTaskRepository()
+    setError(null); setLoading(true);
+    createTaskService()
       .getById(id)
       .then((task) => {
         setInitialTask(task);
       })
-      .catch(() => undefined)
+      .catch(() => setError('No se pudo cargar el elemento'))
       .finally(() => setLoading(false));
-  }, [isEdit, id]);
+  }, [isEdit, id, attempt]);
 
   const handleSaved = (): void => {
-    navigate('/tasks');
+    void navigate('/tasks');
   };
 
   const handleCancel = (): void => {
-    navigate('/tasks');
+    void navigate('/tasks');
   };
+
+  if (error) return <ErrorNotice message={error} onRetry={() => setAttempt(value => value + 1)} />;
 
   if (loading) {
     return (

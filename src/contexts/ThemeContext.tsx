@@ -1,65 +1,51 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { getExecutor } from '@/database/sqlite.ts';
 import { saveThemeToDb, THEME_STORAGE_KEY } from '@/database/repositories/ThemeRepository.ts';
 import { notifyWidgetsUpdated } from '@/plugins/WidgetBridge.ts';
-
 export type ThemeMode = 'light' | 'dark';
-
+export type ThemePreference = ThemeMode | 'system';
 interface ThemeContextValue {
-  theme: ThemeMode;
-  toggleTheme: () => void;
-  setTheme: (mode: ThemeMode) => void;
+  theme: ThemeMode; preference: ThemePreference; error: string | null;
+  toggleTheme: () => void; setTheme: (value: ThemePreference) => Promise<void>;
 }
-
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-
-function getInitialTheme(): ThemeMode {
-  try {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === 'light' || stored === 'dark') return stored;
-  } catch {
-    // localStorage no disponible (SSR/privado): usar preferencia del sistema
-  }
-  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-    return 'dark';
-  }
-  return 'light';
-}
-
-export function ThemeProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [theme, setThemeState] = useState<ThemeMode>(getInitialTheme);
-
+const systemDark = (): boolean => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+export function ThemeProvider({children}: {children: ReactNode}): JSX.Element {
+  const [preference, setPreference] = useState<ThemePreference>('system');
+  const [dark, setDark] = useState(systemDark);
+  const [error, setError] = useState<string | null>(null);
+  const changedByUser = useRef(false);
+  const theme: ThemeMode = preference === 'system' ? dark ? 'dark' : 'light' : preference;
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch {
-      // Persistencia best-effort
-    }
-    // Keep native home-screen widgets in sync with the app theme.
-    // Best-effort: on first launch the DB may not be ready yet (useAppInit
-    // persists the theme again after initDatabase completes).
-    // Chain the DB write before notifying widgets so they read the new theme.
-    void saveThemeToDb(theme)
-      .then(() => notifyWidgetsUpdated())
-      .catch(() => undefined);
+    let alive = true;
+    void getExecutor().query<{value: string}>('SELECT value FROM app_settings WHERE key = ?', ['themePreference']).then(async rows => {
+      let value = rows[0]?.value;
+      if (!value) { try { value = localStorage.getItem(THEME_STORAGE_KEY) ?? 'system'; } catch { value = 'system'; } }
+      if (alive && !changedByUser.current && ['system','light','dark'].includes(value)) setPreference(value as ThemePreference);
+    }).catch(() => { if (alive) setError('No se pudo leer la apariencia guardada'); });
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const changed = (): void => setDark(systemDark());
+    media?.addEventListener('change', changed);
+    return () => { alive = false; media?.removeEventListener('change', changed); };
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    void saveThemeToDb(theme).then(notifyWidgetsUpdated).catch(() => setError('No se pudo actualizar la apariencia de los widgets'));
   }, [theme]);
-
-  const setTheme = useCallback((mode: ThemeMode) => {
-    setThemeState(mode);
+  const setTheme = useCallback(async (value: ThemePreference): Promise<void> => {
+    changedByUser.current = true;
+    setError(null);
+    try {
+      await getExecutor().execute('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', ['themePreference', value]);
+      setPreference(value);
+      try { localStorage.setItem(THEME_STORAGE_KEY, value); } catch { /* SQLite remains authoritative. */ }
+    } catch { setError('No se pudo guardar la apariencia'); }
   }, []);
-
-  const toggleTheme = useCallback(() => {
-    setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
-  }, []);
-
-  const value = useMemo(() => ({ theme, toggleTheme, setTheme }), [theme, toggleTheme, setTheme]);
-
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{theme, preference, error, setTheme, toggleTheme: () => { void setTheme(theme === 'light' ? 'dark' : 'light'); }}}>{children}</ThemeContext.Provider>;
 }
-
 export function useTheme(): ThemeContextValue {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error('useTheme must be used within ThemeProvider');
-  return ctx;
+  const value = useContext(ThemeContext);
+  if (!value) throw new Error('ThemeProvider no está disponible');
+  return value;
 }

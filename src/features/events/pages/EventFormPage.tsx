@@ -1,7 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { createEventRepository } from '@/database/repositories/EventRepository.ts';
+import { createEventService } from '@/services/EventService.ts';
 import { EventForm } from '@/features/events/components/EventForm.tsx';
+import { ErrorNotice } from '@/components/ui/ErrorNotice.tsx';
 import { Button } from '@/components/ui/Button.tsx';
 import { ChevronLeftIcon } from '@/components/ui/Icons.tsx';
 import type { EventItem } from '@/features/events/types.ts';
@@ -11,6 +12,8 @@ export function EventFormPage(): JSX.Element {
   const navigate = useNavigate();
   const isEdit = id != null;
   const [initialEvent, setInitialEvent] = useState<EventItem | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(isEdit);
 
   useEffect(() => {
@@ -18,20 +21,23 @@ export function EventFormPage(): JSX.Element {
       setLoading(false);
       return;
     }
-    createEventRepository()
+    setError(null); setLoading(true);
+    createEventService()
       .getById(id)
       .then((event) => setInitialEvent(event))
-      .catch(() => undefined)
+      .catch(() => setError('No se pudo cargar el elemento'))
       .finally(() => setLoading(false));
-  }, [isEdit, id]);
+  }, [isEdit, id, attempt]);
 
   const handleSaved = (): void => {
-    navigate('/events');
+    void navigate('/events');
   };
 
   const handleCancel = (): void => {
-    navigate('/events');
+    void navigate('/events');
   };
+
+  if (error) return <ErrorNotice message={error} onRetry={() => setAttempt(value => value + 1)} />;
 
   if (loading) {
     return (

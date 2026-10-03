@@ -7,5 +7,5 @@ export const appConfig = {
   dailyTaskDurationHours: 24,
   defaultDeadlineIntervalHours: DEFAULT_SETTINGS.deadlineTaskNotificationIntervalHours,
   databaseName: 'taskmanager.db',
-  databaseVersion: 1,
+  maxRemindersPerTask: 10000,
 } as const;

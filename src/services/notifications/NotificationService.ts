@@ -1,5 +1,8 @@
+import { createTaskRepository } from '@/database/repositories/TaskRepository.ts';
+import { createSettingsRepository } from '@/database/repositories/SettingsRepository.ts';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { WidgetBridge } from '@/plugins/WidgetBridge.ts';
 import { appConfig } from '@/config.ts';
 import { computeReminderTimes } from '@/utils/date.ts';
 import type { Task } from '@/features/tasks/types.ts';
@@ -35,13 +38,13 @@ function formatRemainingTime(fireAt: string, endAt: string): string {
   return `Quedan ${minutes}m`;
 }
 
-function buildReminders(task: Task, intervalHours: number): ScheduledReminder[] {
+function buildReminders(task: Task, intervalHours: number, after = Number.NEGATIVE_INFINITY): ScheduledReminder[] {
   if (task.completed) return [];
-  const times = computeReminderTimes(task.startAt, task.endAt, intervalHours);
-  return times.map((fireAt, i) => {
+  const times = computeReminderTimes(task.startAt, task.endAt, intervalHours, after);
+  return times.map((fireAt) => {
     const remaining = formatRemainingTime(fireAt, task.endAt);
     return {
-      notificationId: notificationIdFor(task.id, i),
+      notificationId: notificationIdFor(task.id, Math.round((Date.parse(fireAt) - Date.parse(task.startAt)) / (intervalHours * 3_600_000)) - 1),
       taskId: task.id,
       fireAt,
       title: task.title,
@@ -56,19 +59,19 @@ class CentralNotificationService implements NotificationService {
   async initialize(): Promise<void> {
     if (this.initialized) return;
     if (Capacitor.isNativePlatform()) {
-      try {
-        await LocalNotifications.requestPermissions();
-      } catch {
-        // Permissions are best-effort on web/dev; native errors must not crash init.
-      }
+      await LocalNotifications.addListener('localNotificationActionPerformed', event => {
+        const taskId = (event.notification.extra as {taskId?: string} | undefined)?.taskId;
+        if (taskId) window.location.hash = `/tasks/${encodeURIComponent(taskId)}`;
+      });
     }
     this.initialized = true;
   }
 
   async scheduleTaskNotifications(task: Task, intervalHours?: number): Promise<ScheduledReminder[]> {
     const interval = intervalFor(task, intervalHours);
-    const reminders = buildReminders(task, interval).filter((r) => Date.parse(r.fireAt) > Date.now());
+    const reminders = buildReminders(task, interval, Date.now());
     if (!Capacitor.isNativePlatform()) return reminders; // web/dev: return plan without native scheduling
+    if (Capacitor.getPlatform() === 'android') { await this.rescheduleAllPendingTasks(); return reminders; }
     if (reminders.length === 0) return reminders;
     await LocalNotifications.schedule({
       notifications: reminders.map((r) => ({
@@ -95,9 +98,13 @@ class CentralNotificationService implements NotificationService {
   }
 
   async rescheduleAllPendingTasks(intervalHours?: number): Promise<number> {
-    const { createTaskRepository } = await import('@/database/repositories/TaskRepository.ts');
+    if (Capacitor.getPlatform() === 'android') {
+      const result = await WidgetBridge.reconcileNotifications();
+      return result.count;
+    }
     const repo = createTaskRepository();
     const pending = await repo.getPending();
+    intervalHours ??= await createSettingsRepository().getIntervalHours();
     let count = 0;
     for (const task of pending) {
       if (task.completed) continue;

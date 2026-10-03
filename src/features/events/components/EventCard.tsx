@@ -4,12 +4,13 @@ import { EditIcon, TrashIcon } from '@/components/ui/Icons.tsx';
 import { formatDateTime, formatDate, formatDuration } from '@/utils/date.ts';
 
 interface EventCardProps {
+  busy?: boolean;
   event: EventItem;
   onRemove: (id: string) => void;
   onEdit: (id: string) => void;
 }
 
-export function EventCard({ event, onRemove, onEdit }: EventCardProps): JSX.Element {
+export function EventCard({ event, busy = false, onRemove, onEdit }: EventCardProps): JSX.Element {
   const details = (
     <>
       <div className="detail-divider" />
@@ -53,7 +54,7 @@ export function EventCard({ event, onRemove, onEdit }: EventCardProps): JSX.Elem
       actions={
         <>
           <button
-            type="button"
+            type="button" disabled={busy}
             className="btn-icon"
             onClick={() => onEdit(event.id)}
             aria-label={`Editar evento ${event.title}`}
@@ -62,7 +63,7 @@ export function EventCard({ event, onRemove, onEdit }: EventCardProps): JSX.Elem
             <EditIcon />
           </button>
           <button
-            type="button"
+            type="button" disabled={busy}
             className="btn-icon"
             onClick={() => onRemove(event.id)}
             aria-label={`Eliminar evento ${event.title}`}

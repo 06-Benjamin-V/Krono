@@ -28,6 +28,7 @@ object WidgetDataProvider {
     private val timeFormatter: DateTimeFormatter =
         DateTimeFormatter.ofPattern("HH:mm")
 
+    private val isoMillis = java.time.format.DateTimeFormatterBuilder().appendInstant(3).toFormatter()
     private val zone: ZoneId get() = ZoneId.systemDefault()
 
     // ---------- Theme ----------
@@ -174,8 +175,8 @@ object WidgetDataProvider {
     }
 
     private fun localDateToRangeIso(date: LocalDate): Pair<String, String> {
-        val start = date.atStartOfDay(zone).toInstant().toString()
-        val end = date.atTime(LocalTime.MAX).atZone(zone).toInstant().toString()
+        val start = isoMillis.format(date.atStartOfDay(zone).toInstant())
+        val end = isoMillis.format(date.atTime(LocalTime.MAX).atZone(zone).toInstant())
         return start to end
     }
 
@@ -386,8 +387,8 @@ object WidgetDataProvider {
         val gridDays = (0 until 42).map { gridStart.plusDays(it.toLong()) }
 
         // Query range covering entire grid
-        val gridStartIso = gridDays.first().atStartOfDay(zone).toInstant().toString()
-        val gridEndIso = gridDays.last().atTime(LocalTime.MAX).atZone(zone).toInstant().toString()
+        val gridStartIso = localDateToRangeIso(gridDays.first()).first
+        val gridEndIso = localDateToRangeIso(gridDays.last()).second
         val tasks = queryTasksForDay(context, gridStartIso, gridEndIso)
         val events = queryEventsForDay(context, gridStartIso, gridEndIso)
 

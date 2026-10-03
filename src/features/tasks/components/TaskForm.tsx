@@ -1,4 +1,6 @@
+import { createTaskService } from '@/services/TaskService.ts';
 import { useState } from 'react';
+import { toLocalInputValue, computeDailyEndAt, formatDateTime } from '@/utils/date.ts';
 import type { Task, TaskInput, TaskType } from '@/features/tasks/types.ts';
 import { ColorPicker } from '@/components/ui/ColorPicker.tsx';
 import { Button } from '@/components/ui/Button.tsx';
@@ -10,11 +12,6 @@ interface TaskFormProps {
   initialTask?: Task | null;
 }
 
-function toLocalInputValue(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export function TaskForm({ onCreated, onCancel, initialTask }: TaskFormProps): JSX.Element {
   const [type, setType] = useState<TaskType>(initialTask?.type ?? 'DAILY');
@@ -60,8 +57,7 @@ export function TaskForm({ onCreated, onCancel, initialTask }: TaskFormProps): J
         }
         input.endAt = endIso;
       }
-      const { createTaskRepository } = await import('@/database/repositories/TaskRepository.ts');
-      const repo = createTaskRepository();
+      const repo = createTaskService();
       if (isEdit && initialTask) {
         await repo.update(initialTask.id, input);
       } else {
@@ -76,7 +72,7 @@ export function TaskForm({ onCreated, onCancel, initialTask }: TaskFormProps): J
   };
 
   return (
-    <form
+    <form aria-describedby={error ? "form-error" : undefined}
       onSubmit={(e) => {
         e.preventDefault();
         void handleSubmit();
@@ -85,10 +81,10 @@ export function TaskForm({ onCreated, onCancel, initialTask }: TaskFormProps): J
       <div className="form-group">
         <label>Tipo</label>
         <div className="segmented">
-          <button type="button" className={type === 'DAILY' ? 'active' : ''} onClick={() => setType('DAILY')}>
+          <button type="button" aria-pressed={type === 'DAILY'} className={type === 'DAILY' ? 'active' : ''} onClick={() => setType('DAILY')}>
             24 horas
           </button>
-          <button type="button" className={type === 'DEADLINE' ? 'active' : ''} onClick={() => setType('DEADLINE')}>
+          <button type="button" aria-pressed={type === 'DEADLINE'} className={type === 'DEADLINE' ? 'active' : ''} onClick={() => setType('DEADLINE')}>
             Con plazo
           </button>
         </div>
@@ -102,7 +98,7 @@ export function TaskForm({ onCreated, onCancel, initialTask }: TaskFormProps): J
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="¿Qué tienes que hacer?"
-          autoFocus
+          required
         />
       </div>
 
@@ -119,9 +115,10 @@ export function TaskForm({ onCreated, onCancel, initialTask }: TaskFormProps): J
 
       <div className="form-group">
         <label htmlFor="task-start">Inicio</label>
-        <input id="task-start" type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} />
+        <input id="task-start" required type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} />
       </div>
 
+      {type === 'DAILY' && startAt && !Number.isNaN(Date.parse(startAt)) && <p className="form-hint">Termina el {formatDateTime(computeDailyEndAt(new Date(startAt).toISOString()))}. Dura 24 horas, no se repite. Recordatorios cada 2 horas.</p>}
       {type === 'DEADLINE' && (
         <div className="form-group anim-slide-down">
           <label htmlFor="task-end">Término</label>
@@ -135,7 +132,7 @@ export function TaskForm({ onCreated, onCancel, initialTask }: TaskFormProps): J
       </div>
 
       {error && (
-        <p className="anim-shake" style={{ color: 'var(--danger)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+        <p id="form-error" role="alert" className="anim-shake" style={{ color: 'var(--danger)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
           {error}
         </p>
       )}

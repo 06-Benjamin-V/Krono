@@ -8,8 +8,8 @@ android {
         applicationId "com.personaltaskmanager.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "0.2.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -24,12 +24,12 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
         coreLibraryDesugaringEnabled true
     }
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = '21'
     }
 }
 
@@ -56,11 +56,11 @@ dependencies {
 
 apply from: 'capacitor.build.gradle'
 
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+// Package the canonical SQL files used by web/integration tests and native widgets.
+def schemaAssets = layout.buildDirectory.dir('generated/schemaAssets')
+tasks.register('copySchemaAssets', Copy) {
+    from('../../src/database/migrations')
+    into(schemaAssets.map { it.dir('migrations') })
 }
+android.sourceSets.main.assets.srcDir(schemaAssets)
+tasks.named('preBuild').configure { dependsOn('copySchemaAssets') }

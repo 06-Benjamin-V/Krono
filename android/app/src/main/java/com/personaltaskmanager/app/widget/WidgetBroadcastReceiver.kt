@@ -41,6 +41,11 @@ class WidgetBroadcastReceiver : BroadcastReceiver() {
     /** Called by the service on a background thread. Keep logic here for reuse. */
     fun handleIntent(context: Context, intent: Intent) {
         when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                try { com.personaltaskmanager.app.TaskReminderCoordinator.reconcile(context) }
+                catch (error: Exception) { android.util.Log.e("Krono", "Recordatorios pendientes tras reinicio", error) }
+                refreshAllWidgets(context)
+            }
             ACTION_PREV_DAY, ACTION_NEXT_DAY -> handleDayNav(context, intent)
             ACTION_TOGGLE_COMPLETE -> handleToggleComplete(context, intent)
             ACTION_WIDGET_DATA_CHANGED -> refreshAllWidgets(context)
@@ -116,76 +121,21 @@ class WidgetBroadcastReceiver : BroadcastReceiver() {
 
     private fun handleToggleComplete(context: Context, intent: Intent) {
         val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return
-        val nowIso = Instant.now().toString()
         try {
-            // Read current completion state so the checkbox toggles both ways
-            val currentCompleted = readTaskCompleted(context, taskId)
-            val newCompleted = if (currentCompleted == 1) 0 else 1
-            val cv = ContentValues().apply {
-                put("completed", newCompleted)
-                if (newCompleted == 1) {
-                    put("completed_at", nowIso)
-                } else {
-                    putNull("completed_at")
-                }
-                put("updated_at", nowIso)
-            }
-            // Try via ContentProvider first
-            val rows = context.contentResolver.update(
-                com.personaltaskmanager.app.database.TaskManagerContentProvider.CONTENT_URI_TASKS,
-                cv,
-                "id = ?",
-                arrayOf(taskId)
-            )
-            // Fallback direct DB if provider affected 0 (e.g. file not yet created)
-            if (rows == 0) {
-                try {
-                    val helper = com.personaltaskmanager.app.database.TaskManagerDatabaseHelper(context)
-                    val db = helper.writableDatabase
-                    db.update("tasks", cv, "id = ?", arrayOf(taskId))
-                    db.close()
-                } catch (_: Exception) {
-                }
-            }
-        } catch (e: Exception) {
-            // Direct DB as fallback
-            try {
-                val helper = com.personaltaskmanager.app.database.TaskManagerDatabaseHelper(context)
+            com.personaltaskmanager.app.database.TaskManagerDatabaseHelper(context).use { helper ->
                 val db = helper.writableDatabase
-                val currentCompleted = readTaskCompleted(context, taskId)
-                val newCompleted = if (currentCompleted == 1) 0 else 1
-                val cv = ContentValues().apply {
-                    put("completed", newCompleted)
-                    if (newCompleted == 1) {
-                        put("completed_at", Instant.now().toString())
-                    } else {
-                        putNull("completed_at")
-                    }
-                    put("updated_at", Instant.now().toString())
-                }
-                db.update("tasks", cv, "id = ?", arrayOf(taskId))
-                db.close()
-            } catch (_: Exception) {
+                db.beginTransaction()
+                try {
+                    val now = java.time.format.DateTimeFormatterBuilder().appendInstant(3).toFormatter().format(Instant.now())
+                    db.execSQL("UPDATE tasks SET completed_at = CASE WHEN completed = 0 THEN ? ELSE NULL END, completed = CASE WHEN completed = 0 THEN 1 ELSE 0 END, updated_at = ? WHERE id = ?", arrayOf(now, now, taskId))
+                    db.setTransactionSuccessful()
+                } finally { db.endTransaction() }
             }
+            com.personaltaskmanager.app.TaskReminderCoordinator.reconcile(context)
+        } catch (error: Exception) {
+            android.util.Log.e("Krono", "No se pudo sincronizar la acción del widget", error)
         }
         refreshAllWidgets(context)
-    }
-
-    private fun readTaskCompleted(context: Context, taskId: String): Int {
-        return try {
-            val cursor = context.contentResolver.query(
-                com.personaltaskmanager.app.database.TaskManagerContentProvider.CONTENT_URI_TASKS,
-                arrayOf("completed"),
-                "id = ?",
-                arrayOf(taskId),
-                null
-            )
-            cursor?.use {
-                if (it.moveToFirst()) it.getInt(it.getColumnIndexOrThrow("completed")) else 0
-            } ?: 0
-        } catch (_: Exception) {
-            0
-        }
     }
 
     private fun refreshAllWidgets(context: Context) {

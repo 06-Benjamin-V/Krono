@@ -1,6 +1,6 @@
 # Plan de acción — Krono
 
-Fecha: 3 de octubre de 2026. Estado: **propuesta pendiente de aprobación**.
+Fecha: 3 de octubre de 2026. Estado: **aprobado por el usuario e implementado; QA de dispositivo real pendiente**. Este documento conserva la propuesta original; los resultados y límites actuales están en `informeValidacion.md`.
 
 ## 1. Recomendación
 
@@ -185,4 +185,4 @@ Copia local exportable/importable, duplicación de tareas/eventos, archivo y est
 
 Recomiendo aprobar las fases 0–6 y el bloque de herramientas web; mantener React inicialmente; y condicionar la migración Capacitor/SQLite a la compatibilidad Android confirmada en fase 0. La persistencia web completa y las ampliaciones de la sección 6 quedan fuera.
 
-Al confirmar, conviene indicar si se acepta elevar el Android mínimo que requiera la versión elegida y si la web seguirá siendo de desarrollo. No hay cambios de aplicación autorizados todavía: la próxima ejecución comienza solo después de la confirmación solicitada por el usuario.
+La aprobación posterior del usuario autorizó las fases y la mejora visual final. Se implementó Android mínimo API 24 y se mantuvo la web como vista de desarrollo. Consultar `informeValidacion.md` para el cierre técnico y las comprobaciones pendientes.

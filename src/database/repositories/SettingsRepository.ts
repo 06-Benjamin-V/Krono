@@ -1,6 +1,6 @@
+import { validateInterval } from '@/services/validation.ts';
 import { DEFAULT_SETTINGS, type AppSettings } from '@/features/settings/types.ts';
 import { getExecutor } from '../sqlite.ts';
-import { notifyWidgetsUpdated } from '@/plugins/WidgetBridge.ts';
 
 export interface SettingsRepository {
   load(): Promise<AppSettings>;
@@ -21,10 +21,11 @@ class SqlSettingsRepository implements SettingsRepository {
     );
     const raw = rows[0]?.value;
     const n = raw ? Number(raw) : DEFAULT_SETTINGS.deadlineTaskNotificationIntervalHours;
-    return { deadlineTaskNotificationIntervalHours: Number.isFinite(n) && n > 0 ? n : 4 };
+    return { deadlineTaskNotificationIntervalHours: Number.isFinite(n) && n > 0 ? n : DEFAULT_SETTINGS.deadlineTaskNotificationIntervalHours };
   }
 
   async save(s: AppSettings): Promise<void> {
+    validateInterval(s.deadlineTaskNotificationIntervalHours);
     await getExecutor().execute(
       'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
       ['deadlineTaskNotificationIntervalHours', String(s.deadlineTaskNotificationIntervalHours)],
@@ -36,21 +37,11 @@ class SqlSettingsRepository implements SettingsRepository {
   }
 
   async setIntervalHours(hours: number): Promise<void> {
-    if (!(hours > 0)) throw new Error('Interval must be > 0');
+    validateInterval(hours);
     const current = await this.load();
     await this.save({ ...current, deadlineTaskNotificationIntervalHours: hours });
 
-    // Best-effort: reschedule all pending task notifications
-    try {
-      const { getNotificationService } = await import(
-        '@/services/notifications/NotificationService.ts'
-      );
-      await getNotificationService().rescheduleAllPendingTasks(hours);
-    } catch {
-      // Notification failure must not break settings save
-    }
 
-    await notifyWidgetsUpdated();
   }
 }
 

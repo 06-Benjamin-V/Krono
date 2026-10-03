@@ -1,3 +1,4 @@
+import { appConfig } from '@/config.ts';
 import {
   addDays,
   addHours,
@@ -74,7 +75,7 @@ export function addDaysISO(iso: ISODateString, days: number): ISODateString {
 
 /** DAILY tasks last exactly 24h. */
 export function computeDailyEndAt(startAt: ISODateString): ISODateString {
-  return addHoursISO(startAt, 24);
+  return addHoursISO(startAt, appConfig.dailyTaskDurationHours);
 }
 
 export function startOfDayISO(day: ISODateString): ISODateString {
@@ -109,7 +110,7 @@ export function isWithinDayISO(iso: ISODateString, day: ISODateString): boolean 
 export function formatDayHeader(day: ISODateString, locale?: string): string {
   const d = parseISO(day);
   void locale;
-  return format(d, 'd MMMM yyyy');
+  return format(d, 'd MMMM yyyy', { locale: es });
 }
 
 /** Month header, e.g. "septiembre 2026". */
@@ -122,13 +123,17 @@ export function computeReminderTimes(
   startAt: ISODateString,
   endAt: ISODateString,
   intervalHours: number,
+  after = Number.NEGATIVE_INFINITY,
 ): ISODateString[] {
   const start = parseISO(startAt).getTime();
   const end = parseISO(endAt).getTime();
   if (!(end > start)) return [];
-  if (intervalHours <= 0) return [];
+  if (!Number.isFinite(intervalHours) || intervalHours <= 0) return [];
   const out: ISODateString[] = [];
-  let t = start + intervalHours * 3_600_000;
+  const step = intervalHours * 3_600_000;
+  const first = Number.isFinite(after) ? Math.max(1, Math.floor((after - start) / step) + 1) : 1;
+  let t = start + first * step;
+  if (Math.ceil((end - t) / step) > appConfig.maxRemindersPerTask) throw new Error('El plazo supera el límite de recordatorios; aumenta el intervalo');
   while (t < end) {
     out.push(new Date(t).toISOString());
     t += intervalHours * 3_600_000;
@@ -137,3 +142,8 @@ export function computeReminderTimes(
 }
 
 export { parseISO };
+
+export function toLocalInputValue(iso: string): string { return format(parseISO(iso), "yyyy-MM-dd'T'HH:mm"); }
+export function overlapsDay(item: {startAt: string; endAt: string}, day: string): boolean {
+  return item.startAt <= endOfDayISO(day) && item.endAt >= startOfDayISO(day);
+}

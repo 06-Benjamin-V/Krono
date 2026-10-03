@@ -1,11 +1,10 @@
 import type { Task, TaskInput } from '@/features/tasks/types.ts';
 import type { ISODateString, UUID } from '@/types/common.ts';
-import { computeDailyEndAt, nowISO, startOfDayISO, endOfDayISO } from '@/utils/date.ts';
+import { computeDailyEndAt, nowISO, startOfDayISO, endOfDayISO, parseISOOrThrow } from '@/utils/date.ts';
 import { normalizeColor } from '@/utils/color.ts';
 import { newId } from '@/utils/id.ts';
 import { getExecutor } from '../sqlite.ts';
 import type { TaskRow } from '../schema.ts';
-import { notifyWidgetsUpdated } from '@/plugins/WidgetBridge.ts';
 
 export interface TaskRepository {
   getAll(): Promise<Task[]>;
@@ -25,11 +24,13 @@ export interface TaskRepository {
 // ---------------------------------------------------------------------------
 
 function validate(input: TaskInput): void {
-  if (!input.title.trim()) throw new Error('Task title is required');
+  if (!input.title.trim()) throw new Error('El título es obligatorio');
+  parseISOOrThrow(input.startAt);
+  if (!['DAILY', 'DEADLINE'].includes(input.type)) throw new Error('Tipo de tarea inválido');
   if (input.type === 'DEADLINE') {
-    if (!input.endAt) throw new Error('DEADLINE tasks require endAt');
+    if (!input.endAt) throw new Error('Indica la fecha de término');
     if (!(Date.parse(input.endAt) > Date.parse(input.startAt))) {
-      throw new Error('endAt must be later than startAt');
+      throw new Error('El término debe ser posterior al inicio');
     }
   }
 }
@@ -101,13 +102,13 @@ class SqlTaskRepository implements TaskRepository {
     validate(input);
     const now = nowISO();
     const endAt =
-      input.type === 'DAILY' ? computeDailyEndAt(input.startAt) : (input.endAt as ISODateString);
+      input.type === 'DAILY' ? computeDailyEndAt(input.startAt) : parseISOOrThrow(input.endAt!);
     const task: Task = {
       id: newId(),
       title: input.title.trim(),
       description: input.description,
       type: input.type,
-      startAt: input.startAt,
+      startAt: parseISOOrThrow(input.startAt),
       endAt,
       color: normalizeColor(input.color),
       completed: false,
@@ -133,22 +134,6 @@ class SqlTaskRepository implements TaskRepository {
       ],
     );
 
-    // Schedule reminders — dynamic import avoids circular dependency.
-    // DEADLINE usa el intervalo guardado en Ajustes; DAILY usa su cadencia fija.
-    try {
-      const [{ getNotificationService }, { createSettingsRepository }] = await Promise.all([
-        import('@/services/notifications/NotificationService.ts'),
-        import('@/database/repositories/SettingsRepository.ts'),
-      ]);
-      const interval =
-        task.type === 'DEADLINE' ? await createSettingsRepository().getIntervalHours() : undefined;
-      await getNotificationService().scheduleTaskNotifications(task, interval);
-    } catch {
-      // Best-effort: notification failure must not break task creation
-    }
-
-    await notifyWidgetsUpdated();
-
     return task;
   }
 
@@ -159,7 +144,7 @@ class SqlTaskRepository implements TaskRepository {
 
     const now = nowISO();
     const endAt =
-      input.type === 'DAILY' ? computeDailyEndAt(input.startAt) : (input.endAt as ISODateString);
+      input.type === 'DAILY' ? computeDailyEndAt(input.startAt) : parseISOOrThrow(input.endAt!);
 
     await getExecutor().execute(
       `UPDATE tasks SET title = ?, description = ?, type = ?, start_at = ?, end_at = ?, color = ?, updated_at = ? WHERE id = ?`,
@@ -167,7 +152,7 @@ class SqlTaskRepository implements TaskRepository {
         input.title.trim(),
         input.description ?? null,
         input.type,
-        input.startAt,
+        parseISOOrThrow(input.startAt),
         endAt,
         normalizeColor(input.color),
         now,
@@ -180,26 +165,11 @@ class SqlTaskRepository implements TaskRepository {
       title: input.title.trim(),
       description: input.description,
       type: input.type,
-      startAt: input.startAt,
+      startAt: parseISOOrThrow(input.startAt),
       endAt,
       color: normalizeColor(input.color),
       updatedAt: now,
     };
-
-    // Reschedule notifications
-    try {
-      const [{ getNotificationService }, { createSettingsRepository }] = await Promise.all([
-        import('@/services/notifications/NotificationService.ts'),
-        import('@/database/repositories/SettingsRepository.ts'),
-      ]);
-      const interval =
-        input.type === 'DEADLINE' ? await createSettingsRepository().getIntervalHours() : undefined;
-      await getNotificationService().rescheduleTaskNotifications(updatedTask, interval);
-    } catch {
-      // Best-effort
-    }
-
-    await notifyWidgetsUpdated();
 
     return updatedTask;
   }
@@ -214,18 +184,6 @@ class SqlTaskRepository implements TaskRepository {
       [completedAt, completedAt, id],
     );
 
-    // Cancel notifications — dynamic import avoids circular dependency
-    try {
-      const { getNotificationService } = await import(
-        '@/services/notifications/NotificationService.ts'
-      );
-      await getNotificationService().cancelTaskNotifications(id);
-    } catch {
-      // Best-effort: notification failure must not break task completion
-    }
-
-    await notifyWidgetsUpdated();
-
     return { ...existing, completed: true, completedAt, updatedAt: completedAt };
   }
 
@@ -239,42 +197,12 @@ class SqlTaskRepository implements TaskRepository {
       [updatedAt, id],
     );
 
-    // Re-schedule reminders — dynamic import avoids circular dependency.
-    // DEADLINE usa el intervalo guardado; DAILY su cadencia fija.
-    try {
-      const [{ getNotificationService }, { createSettingsRepository }] = await Promise.all([
-        import('@/services/notifications/NotificationService.ts'),
-        import('@/database/repositories/SettingsRepository.ts'),
-      ]);
-      const interval =
-        existing.type === 'DEADLINE' ? await createSettingsRepository().getIntervalHours() : undefined;
-      await getNotificationService().scheduleTaskNotifications(
-        { ...existing, completed: false, completedAt: undefined, updatedAt },
-        interval,
-      );
-    } catch {
-      // Best-effort
-    }
-
-    await notifyWidgetsUpdated();
-
     return { ...existing, completed: false, completedAt: undefined, updatedAt };
   }
 
   async remove(id: UUID): Promise<void> {
     await getExecutor().execute('DELETE FROM tasks WHERE id = ?', [id]);
 
-    // Cancel notifications — dynamic import avoids circular dependency
-    try {
-      const { getNotificationService } = await import(
-        '@/services/notifications/NotificationService.ts'
-      );
-      await getNotificationService().cancelTaskNotifications(id);
-    } catch {
-      // Best-effort
-    }
-
-    await notifyWidgetsUpdated();
   }
 }
 

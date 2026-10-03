@@ -1,11 +1,10 @@
 import type { EventInput, EventItem } from '@/features/events/types.ts';
 import type { ISODateString, UUID } from '@/types/common.ts';
-import { nowISO, startOfDayISO, endOfDayISO } from '@/utils/date.ts';
+import { nowISO, startOfDayISO, endOfDayISO, parseISOOrThrow } from '@/utils/date.ts';
 import { normalizeColor } from '@/utils/color.ts';
 import { newId } from '@/utils/id.ts';
 import { getExecutor } from '../sqlite.ts';
 import type { EventRow } from '../schema.ts';
-import { notifyWidgetsUpdated } from '@/plugins/WidgetBridge.ts';
 
 export interface EventRepository {
   getAll(): Promise<EventItem[]>;
@@ -22,9 +21,9 @@ export interface EventRepository {
 // ---------------------------------------------------------------------------
 
 function validateEvent(input: EventInput): void {
-  if (!input.title.trim()) throw new Error('Event title is required');
+  if (!input.title.trim()) throw new Error('El título es obligatorio');
   if (!(Date.parse(input.endAt) >= Date.parse(input.startAt))) {
-    throw new Error('Event endAt must be >= startAt');
+    throw new Error('El término no puede ser anterior al inicio');
   }
 }
 
@@ -88,8 +87,8 @@ class SqlEventRepository implements EventRepository {
       id: newId(),
       title: input.title.trim(),
       description: input.description,
-      startAt: input.startAt,
-      endAt: input.endAt,
+      startAt: parseISOOrThrow(input.startAt),
+      endAt: parseISOOrThrow(input.endAt),
       color: normalizeColor(input.color),
       createdAt: now,
       updatedAt: now,
@@ -110,7 +109,7 @@ class SqlEventRepository implements EventRepository {
       ],
     );
 
-    await notifyWidgetsUpdated();
+
 
     return item;
   }
@@ -126,22 +125,22 @@ class SqlEventRepository implements EventRepository {
       [
         input.title.trim(),
         input.description ?? null,
-        input.startAt,
-        input.endAt,
+        parseISOOrThrow(input.startAt),
+        parseISOOrThrow(input.endAt),
         normalizeColor(input.color),
         now,
         id,
       ],
     );
 
-    await notifyWidgetsUpdated();
+
 
     return {
       ...existing,
       title: input.title.trim(),
       description: input.description,
-      startAt: input.startAt,
-      endAt: input.endAt,
+      startAt: parseISOOrThrow(input.startAt),
+      endAt: parseISOOrThrow(input.endAt),
       color: normalizeColor(input.color),
       updatedAt: now,
     };
@@ -149,7 +148,7 @@ class SqlEventRepository implements EventRepository {
 
   async remove(id: UUID): Promise<void> {
     await getExecutor().execute('DELETE FROM events WHERE id = ?', [id]);
-    await notifyWidgetsUpdated();
+
   }
 }
 

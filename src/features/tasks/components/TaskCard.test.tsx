@@ -39,7 +39,7 @@ describe('TaskCard', () => {
     setup();
     expect(screen.getByText('Comprar pan')).toBeInTheDocument();
     expect(screen.getByText('24 HORAS')).toBeInTheDocument();
-    expect(screen.getByText('10:00 → 10:00')).toBeInTheDocument();
+    expect(screen.getByText('Hasta 15 sep 2026, 10:00')).toBeInTheDocument();
   });
 
   it('llama a onEdit con el id al pulsar el lápiz', () => {
@@ -95,7 +95,7 @@ describe('TaskCard', () => {
     expect(screen.getByRole('button', { name: 'Marcar como pendiente' })).toBeInTheDocument();
 
     fireEvent.click(container.querySelector<HTMLButtonElement>('.item-main')!);
-    expect(screen.getByText('Completada')).toBeInTheDocument();
+    expect(screen.getAllByText('Completada')).toHaveLength(2);
     expect(screen.getByText('Completada el')).toBeInTheDocument();
     expect(screen.getByText('14 sep 2026, 12:00')).toBeInTheDocument();
   });

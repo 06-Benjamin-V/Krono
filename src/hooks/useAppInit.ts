@@ -1,37 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { initDatabase } from '@/database/sqlite.ts';
 import { getNotificationService } from '@/services/notifications/NotificationService.ts';
-import { saveThemeToDb, THEME_STORAGE_KEY } from '@/database/repositories/ThemeRepository.ts';
-
-export function useAppInit(): { ready: boolean; error: string | null } {
+import { synchronizeTasks } from '@/services/TaskService.ts';
+import { setSyncWarning } from '@/services/feedback.ts';
+import { useResume } from './useResume.ts';
+export function useAppInit() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let alive = true;
-    (async () => {
+    setError(null);
+    void (async () => {
       try {
         await initDatabase();
-        // Persist the current theme to SQLite so native widgets can read it.
-        // ThemeContext may run before the DB is ready on first launch.
-        try {
-          const stored = localStorage.getItem(THEME_STORAGE_KEY);
-          if (stored === 'light' || stored === 'dark') {
-            await saveThemeToDb(stored);
-          }
-        } catch {
-          // Best-effort: widget theming must not break app startup.
-        }
-        await getNotificationService().initialize();
+        try { await getNotificationService().initialize(); }
+        catch { setSyncWarning('No se pudo conectar con las notificaciones. Reintenta desde Ajustes.'); }
         if (alive) setReady(true);
-      } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : 'Init failed');
-      }
+        await synchronizeTasks();
+      } catch(e) { if (alive) setError(e instanceof Error ? e.message : 'No se pudo iniciar'); }
     })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  return { ready, error };
+    return () => { alive = false; };
+  }, [attempt]);
+  const resume = useCallback(() => { if (ready) void synchronizeTasks(); }, [ready]);
+  useResume(resume);
+  return { ready, error, retry: () => setAttempt(value => value + 1) };
 }

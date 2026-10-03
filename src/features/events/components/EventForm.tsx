@@ -1,4 +1,6 @@
+import { createEventService } from '@/services/EventService.ts';
 import { useState } from 'react';
+import { toLocalInputValue } from '@/utils/date.ts';
 import type { EventItem, EventInput } from '@/features/events/types.ts';
 import { ColorPicker } from '@/components/ui/ColorPicker.tsx';
 import { Button } from '@/components/ui/Button.tsx';
@@ -10,11 +12,6 @@ interface EventFormProps {
   initialEvent?: EventItem | null;
 }
 
-function toLocalInputValue(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export function EventForm({ onCreated, onCancel, initialEvent }: EventFormProps): JSX.Element {
   const [title, setTitle] = useState(initialEvent?.title ?? '');
@@ -55,8 +52,7 @@ export function EventForm({ onCreated, onCancel, initialEvent }: EventFormProps)
         endAt: endIso,
         color,
       };
-      const { createEventRepository } = await import('@/database/repositories/EventRepository.ts');
-      const repo = createEventRepository();
+      const repo = createEventService();
       if (isEdit && initialEvent) {
         await repo.update(initialEvent.id, input);
       } else {
@@ -71,7 +67,7 @@ export function EventForm({ onCreated, onCancel, initialEvent }: EventFormProps)
   };
 
   return (
-    <form
+    <form aria-describedby={error ? "form-error" : undefined}
       onSubmit={(e) => {
         e.preventDefault();
         void handleSubmit();
@@ -85,7 +81,7 @@ export function EventForm({ onCreated, onCancel, initialEvent }: EventFormProps)
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="¿Qué evento tienes?"
-          autoFocus
+          required
         />
       </div>
 
@@ -103,7 +99,7 @@ export function EventForm({ onCreated, onCancel, initialEvent }: EventFormProps)
       <div className="form-row">
         <div className="form-group">
           <label htmlFor="event-start">Inicio</label>
-          <input id="event-start" type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} />
+          <input id="event-start" required type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} />
         </div>
         <div className="form-group">
           <label htmlFor="event-end">Término</label>
@@ -117,7 +113,7 @@ export function EventForm({ onCreated, onCancel, initialEvent }: EventFormProps)
       </div>
 
       {error && (
-        <p className="anim-shake" style={{ color: 'var(--danger)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+        <p id="form-error" role="alert" className="anim-shake" style={{ color: 'var(--danger)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
           {error}
         </p>
       )}

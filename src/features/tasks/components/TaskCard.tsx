@@ -1,22 +1,26 @@
+import { useClock } from '@/hooks/useClock.ts';
 import type { Task } from '@/features/tasks/types.ts';
 import { ExpandableCard } from '@/components/ui/ExpandableCard.tsx';
 import { CheckIcon, EditIcon, TrashIcon } from '@/components/ui/Icons.tsx';
-import { formatDateTime, formatDate, formatDuration, formatTime } from '@/utils/date.ts';
+import { formatDateTime, formatDate, formatDuration } from '@/utils/date.ts';
 
 interface TaskCardProps {
+  busy?: boolean;
   task: Task;
   onToggleComplete: (id: string) => void;
   onRemove: (id: string) => void;
   onEdit: (id: string) => void;
 }
 
-export function TaskCard({ task, onToggleComplete, onRemove, onEdit }: TaskCardProps): JSX.Element {
+export function TaskCard({ task, busy = false, onToggleComplete, onRemove, onEdit }: TaskCardProps): JSX.Element {
+  const now = useClock();
+  const status = task.completed ? 'Completada' : Date.parse(task.endAt) < now ? 'Vencida' : Date.parse(task.startAt) > now ? 'Por empezar' : 'En curso';
   const meta = (
     <>
       <span className={`chip ${task.type === 'DAILY' ? 'chip-daily' : 'chip-deadline'}`}>
         {task.type === 'DAILY' ? '24 HORAS' : 'PLAZO'}
       </span>
-      <span style={{ marginLeft: 6 }}>{formatTime(task.startAt)} → {formatTime(task.endAt)}</span>
+      <span className="card-deadline">Hasta {formatDateTime(task.endAt)}</span><span className="card-status">{status}</span>
     </>
   );
 
@@ -71,9 +75,10 @@ export function TaskCard({ task, onToggleComplete, onRemove, onEdit }: TaskCardP
       meta={meta}
       leading={
         <button
-          type="button"
+          type="button" disabled={busy}
           className={`check-circle ${task.completed ? 'checked' : ''}`}
           onClick={() => onToggleComplete(task.id)}
+          aria-pressed={task.completed}
           aria-label={task.completed ? 'Marcar como pendiente' : 'Marcar como completada'}
         >
           {task.completed && <CheckIcon />}
@@ -82,7 +87,7 @@ export function TaskCard({ task, onToggleComplete, onRemove, onEdit }: TaskCardP
       actions={
         <>
           <button
-            type="button"
+            type="button" disabled={busy}
             className="btn-icon"
             onClick={() => onEdit(task.id)}
             aria-label={`Editar tarea ${task.title}`}
@@ -91,7 +96,7 @@ export function TaskCard({ task, onToggleComplete, onRemove, onEdit }: TaskCardP
             <EditIcon />
           </button>
           <button
-            type="button"
+            type="button" disabled={busy}
             className="btn-icon"
             onClick={() => onRemove(task.id)}
             aria-label={`Eliminar tarea ${task.title}`}

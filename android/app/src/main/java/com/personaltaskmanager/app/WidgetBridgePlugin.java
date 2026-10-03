@@ -16,6 +16,25 @@ import com.personaltaskmanager.app.widget.WidgetBroadcastReceiver;
 @CapacitorPlugin(name = "WidgetBridge")
 public class WidgetBridgePlugin extends Plugin {
 
+    @PluginMethod
+    public void prepareDatabase(PluginCall call) {
+        try (com.personaltaskmanager.app.database.TaskManagerDatabaseHelper helper =
+                new com.personaltaskmanager.app.database.TaskManagerDatabaseHelper(getContext())) {
+            helper.getWritableDatabase();
+            call.resolve();
+        } catch (Exception error) { call.reject("No se pudo abrir la base de datos", error); }
+    }
+
+    @PluginMethod
+    public void reconcileNotifications(PluginCall call) {
+        try {
+            int count = TaskReminderCoordinator.reconcile(getContext());
+            com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+            result.put("count", count);
+            call.resolve(result);
+        } catch (Exception error) { call.reject(error.getMessage(), error); }
+    }
+
     public static final String ACTION_WIDGET_DATA_CHANGED =
             "com.personaltaskmanager.app.widget.ACTION_WIDGET_DATA_CHANGED";
 
