@@ -22,7 +22,7 @@ Do not introduce a remote backend, cloud database, authentication server, or ext
 
 ## Git policy
 
-No AI agent may execute Git commands, including read-only commands. After a coherent change is complete, the agent must propose exactly one Conventional Commit message. The human user performs all Git operations, including commit and push.
+No AI agent may execute Git commands, including read-only commands. After a coherent change is complete, the agent must propose exactly one Conventional Commit message with its description in Spanish. The human user performs all Git operations, including commit and push.
 
 ## Suggested source organization
 
